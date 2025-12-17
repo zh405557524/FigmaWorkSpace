@@ -1,3 +1,10 @@
+
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 🚨 强制工作流程 - 必须首先执行
 # UI 设计稿生成规范
 
 ## 📋 工作流程规范
@@ -96,6 +103,24 @@ function hexToRgb(hex) {
 }
 ```
 
+**规则 4：透明度处理**
+```javascript
+// ❌ 错误：SOLID 类型不支持 a 属性来设置透明度
+element.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 0.2 } }];
+
+// ✅ 正确：使用 opacity 属性设置透明度
+element.fills = [{ type: 'SOLID', color: grayColors.white }];
+element.opacity = 0.2;  // 使用 opacity 属性
+
+// ✅ 正确：或者使用接近的不透明颜色
+element.fills = [{ type: 'SOLID', color: grayColors[200] }];  // 浅灰色
+```
+
+**重要提示：**
+- SOLID 类型的 `fills` 颜色对象**不接受** `a` 属性
+- 如需透明效果，使用元素的 `opacity` 属性（范围 0-1）
+- 或者选择视觉上接近的不透明颜色
+
 #### 2.2 文字创建规范（必须遵守）
 
 **规则 1：字体加载顺序**
@@ -155,7 +180,147 @@ const colors = {
 };
 ```
 
-**规则 2：错误处理**
+**规则 2：code.js 文件组织规范（避免臃肿）** ⭐ **重要**
+
+`code.js` 是统一插件的入口文件，为了保持代码清晰和可维护性，必须遵循以下组织规则：
+
+**code.js 的职责：**
+```javascript
+// ✅ code.js 只负责以下内容：
+
+// 1. 颜色和字体系统定义（设计令牌）
+const themeColors = { /* ... */ };
+const grayColors = { /* ... */ };
+const typography = { /* ... */ };
+
+// 2. 公共工具函数（如 hexToRgb, createTextNode）
+function hexToRgb(hex) { /* ... */ }
+async function createTextNode(...) { /* ... */ }
+
+// 3. 各个页面的生成函数（保持精简）
+async function createHomePage() { /* ... */ }
+async function createProgressPage() { /* ... */ }
+async function createSettingsPage() { /* ... */ }
+// ... 其他页面函数
+
+// 4. 插件 UI 界面（HTML + 按钮）
+figma.showUI(`...`, { width: 300, height: 340 });
+
+// 5. 消息路由处理
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'create-homepage') {
+    await createHomePage();
+  } else if (msg.type === 'create-settings-page') {
+    await createSettingsPage();
+  }
+  // ... 其他路由
+};
+```
+
+**独立页面文件规范：**
+
+为了便于维护和分发单个功能，每个页面都应该有对应的独立文件：
+
+```javascript
+// ✅ 文件：create-homepage.js （独立可运行）
+// ✅ 文件：create-settings-page.js （独立可运行）
+// ✅ 文件：create-progress-page.js （独立可运行）
+
+// 独立文件包含：
+// 1. 完整的颜色和字体定义（从 code.js 复制）
+// 2. 页面生成函数（createXxxPage）
+// 3. 独立的插件 UI 界面
+// 4. 独立的消息处理
+
+// 示例结构（create-settings-page.js）：
+/**
+ * 独立插件 - 设置页面
+ * 可单独导入到 Figma，不依赖其他文件
+ */
+
+// 1. 颜色系统定义
+function hexToRgb(hex) { /* ... */ }
+const themeColors = { /* ... */ };
+// ... 其他颜色定义
+
+// 2. 文字系统定义
+const typography = { /* ... */ };
+
+// 3. 公共函数
+async function createTextNode(...) { /* ... */ }
+
+// 4. 页面生成函数
+async function createSettingsPage() {
+  try {
+    // 页面生成逻辑
+    figma.notify('设置页面创建成功！✅');
+  } catch (error) {
+    figma.notify(`创建失败: ${error.message}`);
+    console.error('错误详情:', error);
+  }
+}
+
+// 5. 独立的 UI 界面
+figma.showUI(`
+  <html>
+    <body>
+      <h1>创建设置页面</h1>
+      <button onclick="parent.postMessage({pluginMessage: {type: 'create'}}, '*')">
+        创建设计稿
+      </button>
+    </body>
+  </html>
+`, { width: 280, height: 160 });
+
+// 6. 独立的消息处理
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'create') {
+    await createSettingsPage();
+  }
+};
+```
+
+**文件组织最佳实践：**
+
+```
+ui design/
+├── code.js                          # 统一插件（包含所有功能）
+│   ├── 颜色系统定义
+│   ├── 文字系统定义
+│   ├── createHomePage()             # 首页生成函数
+│   ├── createProgressPage()         # 进度页面生成函数
+│   ├── createSettingsPage()         # 设置页面生成函数
+│   ├── createPracticeModeAndGoal()  # 练习模式生成函数
+│   ├── createPianoKeys()            # 钢琴键盘生成函数
+│   ├── createDesignSystemExample()  # 设计系统示例
+│   ├── 插件 UI 界面（6个按钮）
+│   └── 消息路由处理
+│
+├── create-homepage.js               # 独立插件：首页（参考示例）
+├── create-settings-page.js          # 独立插件：设置页面
+├── create-progress-page.js          # 独立插件：进度页面（已删除，已集成到 code.js）
+└── ...
+```
+
+**使用场景：**
+
+1. **日常开发和使用** → 使用 `code.js` 统一插件
+   - 包含所有功能
+   - 一次导入，所有功能可用
+   - 方便快速切换不同页面
+
+2. **分发单个功能** → 使用独立插件文件
+   - 只需要某个特定功能时
+   - 分享给其他开发者
+   - 代码更简洁，易于理解
+
+3. **新增页面时** → 创建两个版本
+   - 先创建独立文件（如 `create-new-page.js`）
+   - 测试功能正常
+   - 将核心函数复制到 `code.js`
+   - 在 `code.js` 中添加按钮和路由
+
+**规则 3：错误处理**
 ```javascript
 // ✅ 必须使用 try-catch
 async function createDesign() {
@@ -314,12 +479,17 @@ const typography = {
 - [ ] **禁止使用 `require` 或 `import`** - 所有代码必须内联
 - [ ] **所有设计令牌直接定义在代码中** - 颜色、字体、间距等
 - [ ] **使用 `try-catch` 包裹所有异步操作** - 提供错误处理
+- [ ] **保持 `code.js` 简洁** - 只包含必要的代码，避免臃肿 ⭐ **新增**
+- [ ] **每个页面创建独立文件** - 如 `create-settings-page.js`，可单独运行 ⭐ **新增**
+- [ ] **code.js 只负责 UI 和路由** - 页面生成函数保持精简 ⭐ **新增**
+- [ ] **独立文件必须完整** - 包含所有必要的定义，不依赖外部文件 ⭐ **新增**
 
 ### 颜色使用
 - [ ] **SOLID 类型颜色** - 只包含 `{ r, g, b }`，不包含 `a`
 - [ ] **渐变类型颜色** - 必须包含 `{ r, g, b, a: 1 }`
 - [ ] **渐变必须包含 `gradientTransform`** - 使用 `[[1, 0, 0], [0, 1, 0]]` 作为默认值
 - [ ] **颜色转换函数不返回 `a`** - `hexToRgb` 只返回 `{ r, g, b }`
+- [ ] **透明度使用 `opacity` 属性** - 不在颜色对象中使用 `a` 属性
 
 ### 文字创建
 - [ ] **先加载字体** - 使用 `await figma.loadFontAsync()`
@@ -356,15 +526,75 @@ const typography = {
 
 ---
 
+## 🎯 快速决策指南
+
+### 何时修改 code.js？
+```
+✅ 添加新页面功能（集成到统一插件）
+✅ 修改插件 UI 界面（添加/删除按钮）
+✅ 修改消息路由逻辑
+✅ 更新公共的颜色或字体定义
+❌ 不要让单个函数超过 500 行
+❌ 不要添加过于复杂的逻辑
+```
+
+### 何时创建独立文件？
+```
+✅ 创建新页面（如 create-xxx-page.js）
+✅ 需要分享单个功能给其他人
+✅ 测试新功能（先独立测试，再集成）
+✅ 提供可选的独立版本
+```
+
+### 新增页面的标准流程：
+```
+步骤 1: 创建独立文件（如 create-new-page.js）
+        ├── 完整的颜色和字体定义
+        ├── 页面生成函数
+        ├── 独立的 UI 界面
+        └── 独立的消息处理
+
+步骤 2: 测试独立文件
+        └── 确保功能正常运行
+
+步骤 3: 集成到 code.js
+        ├── 复制页面生成函数到 code.js
+        ├── 在 UI 中添加新按钮
+        └── 在消息处理中添加路由
+
+步骤 4: 创建使用文档
+        └── 如 "xxx页面使用说明.md"
+
+步骤 5: 更新项目文档
+        ├── 更新 README_插件使用.md
+        ├── 更新 设计稿工具总览.md
+        └── 创建完成说明文档
+```
+
+---
+
 ## 📚 相关文档
 
 - **错误处理流程** - 参考 `错误处理流程.md`（仅在处理错误时使用）
 - **快速参考** - 参考 `QUICK_REFERENCE.md`
 - **设计规范** - 参考 `DESIGN_SPEC.md`
+- **代码组织示例** - 参考 `create-homepage.js`、`create-settings-page.js` ⭐ **新增**
+- **插件使用指南** - 参考 `README_插件使用.md`
+- **工具总览** - 参考 `设计稿工具总览.md`
 
 ---
 
-**版本：** 1.0  
-**最后更新：** 2024-12  
+## 📌 重要更新说明
+
+### v1.1 - 2024-12-17
+- ✅ **新增代码组织规范** - 避免 `code.js` 文件臃肿
+- ✅ **独立文件规范** - 每个页面创建独立的可运行文件
+- ✅ **职责分离** - `code.js` 只负责 UI 界面和消息路由
+- ✅ **参考示例** - `create-homepage.js`、`create-settings-page.js`
+
+---
+
+**版本：** 1.1  
+**最后更新：** 2024-12-17  
 **适用插件：** 钢琴练习应用工具
 
